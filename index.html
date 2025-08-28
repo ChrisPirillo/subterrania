@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Subterrania - A Retro Arcade Cave Explorer Game</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Explore vast, procedurally generated caves in Subterrania, a retro arcade game. Collect crystals, dodge enemies, and map the unknown depths. Can you survive and chart the entire subterranean world?">
+    <meta name="keywords" content="Subterrania, arcade game, retro game, cave exploration, procedural generation, HTML5 game, JavaScript game">
+    <meta name="author" content="Chris Pirillo">
+    <link rel="canonical" href="https://pirillo.com/arcade/subterrania.html">
+
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://pirillo.com/arcade/subterrania.html">
+    <meta property="og:title" content="Subterrania - A Retro Arcade Cave Explorer Game">
+    <meta property="og:description" content="Explore vast, procedurally generated caves in Subterrania, a retro arcade game. Collect crystals, dodge enemies, and map the unknown depths.">
+    <meta property="og:image" content="https://pirillo.com/arcade/images/subterrania.png">
+    <meta property="og:site_name" content="Pirillo.com Arcade">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:url" content="https://pirillo.com/arcade/subterrania.html">
+    <meta name="twitter:title" content="Subterrania - A Retro Arcade Cave Explorer Game">
+    <meta name="twitter:description" content="Explore vast, procedurally generated caves in Subterrania, a retro arcade game. Collect crystals, dodge enemies, and map the unknown depths.">
+    <meta name="twitter:image" content="https://pirillo.com/arcade/images/subterrania.png">
+    <meta name="twitter:creator" content="@ChrisPirillo">
+    <meta name="twitter:site" content="@ChrisPirillo">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet"></noscript>
+
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-1CQ4D3VQ3L"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-1CQ4D3VQ3L');
+    </script>
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "VideoGame",
+      "name": "Subterrania",
+      "url": "https://pirillo.com/arcade/subterrania.html",
+      "author": {
+        "@type": "Person",
+        "name": "Chris Pirillo"
+      },
+      "image": "https://pirillo.com/arcade/images/subterrania.png",
+      "description": "A retro-style arcade game where players explore procedurally generated caves, collect crystals, and avoid enemies.",
+      "gamePlatform": "WebBrowser",
+      "applicationCategory": "Game",
+      "operatingSystem": "All",
+      "genre": ["Arcade game", "Action game"],
+      "publisher": {
+        "@type": "Person",
+        "name": "Chris Pirillo"
+      }
+    }
+    </script>
+
+    <style>
+        /* Critical CSS: Inlined for performance */
+        body {
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+            font-family: 'Press Start 2P', cursive;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            margin: 0;
+            height: 100vh;
+            overflow: hidden;
+        }
+        canvas {
+            background-color: #000;
+            border-top: 4px solid #444; /* Border only on top to separate from HUD */
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            image-rendering: pixelated; /* Ensures crisp pixels */
+            display: block; /* Removes any default spacing below the canvas */
+        }
+        main { /* Changed from #game-container for semantics */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100vw;
+            height: 100vh;
+        }
+        header { /* Changed from #hud for semantics */
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            width: 100%;
+            padding: 10px 20px;
+            font-size: 16px;
+            box-sizing: border-box; /* Ensures padding is included in the width */
+            flex-shrink: 0; /* Prevents HUD from shrinking */
+        }
+        .hud-item {
+            display: flex;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+    <main id="game-container">
+        <header id="hud">
+            <span id="level">LEVEL: 1</span>
+            <span id="lives">LIVES: 5</span>
+            <span id="crystals">CRYSTALS: 5</span>
+        </header>
+        <canvas id="gameCanvas" aria-label="Main game screen for Subterrania"></canvas>
+    </main>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const hud = document.getElementById('hud');
+
+        // --- Game Configuration ---
+        const TILE_SIZE = 20;
+        let MAP_WIDTH;
+        let MAP_HEIGHT;
+
+        const PLAYER_MOVE_DELAY = 8;
+        const INITIAL_LIVES = 5;
+        const BASE_CRYSTAL_COUNT = 5;
+        const ENEMY_COUNT = 3;
+        const ENEMY_SPEED = TILE_SIZE / 12;
+
+        // --- Game State ---
+        let gameState = 'START';
+        let level = 1;
+        let map = [];
+        let inkTrail = [];
+        let revealedWalls = new Set();
+
+        let player = {
+            x: 0,
+            y: 0,
+            lives: INITIAL_LIVES
+        };
+        let playerMoveCooldown = 0;
+
+        let crystals = [];
+        let enemies = [];
+
+        // --- Cheat Code ---
+        const cheatCode = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight'];
+        let userInput = [];
+
+        // --- Game Setup ---
+
+        function setupCanvasAndMap() {
+            const hudHeight = hud.offsetHeight;
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight - hudHeight;
+            canvas.style.width = `${canvas.width}px`;
+            canvas.style.height = `${canvas.height}px`;
+            MAP_WIDTH = Math.floor(canvas.width / TILE_SIZE);
+            MAP_HEIGHT = Math.floor(canvas.height / TILE_SIZE);
+        }
+
+        function generateCave() {
+            map = Array(MAP_HEIGHT).fill(0).map(() => Array(MAP_WIDTH).fill(1));
+            let walkerX = Math.floor(MAP_WIDTH / 2);
+            let walkerY = Math.floor(MAP_HEIGHT / 2);
+            const totalTiles = MAP_WIDTH * MAP_HEIGHT;
+            const floorTilesToCreate = totalTiles / 2.5;
+            let floorsCreated = 0;
+
+            while (floorsCreated < floorTilesToCreate) {
+                if (map[walkerY][walkerX] === 1) {
+                    map[walkerY][walkerX] = 0;
+                    floorsCreated++;
+                }
+                const direction = Math.floor(Math.random() * 4);
+                if (direction === 0 && walkerX > 1) walkerX--;
+                else if (direction === 1 && walkerX < MAP_WIDTH - 2) walkerX++;
+                else if (direction === 2 && walkerY > 1) walkerY--;
+                else if (direction === 3 && walkerY < MAP_HEIGHT - 2) walkerY++;
+            }
+            return { startX: Math.floor(MAP_WIDTH / 2) * TILE_SIZE, startY: Math.floor(MAP_HEIGHT / 2) * TILE_SIZE };
+        }
+
+        function getEmptyTile() {
+            let x, y;
+            do {
+                x = Math.floor(Math.random() * MAP_WIDTH);
+                y = Math.floor(Math.random() * MAP_HEIGHT);
+            } while (map[y][x] !== 0);
+            return { x: x * TILE_SIZE, y: y * TILE_SIZE };
+        }
+
+        function init() {
+            setupCanvasAndMap();
+            const startPos = generateCave();
+            player.x = startPos.startX;
+            player.y = startPos.startY;
+            if (gameState !== 'PLAYING') {
+                 player.lives = INITIAL_LIVES;
+            }
+            playerMoveCooldown = 0;
+            userInput = []; // Reset cheat code input on new game
+
+            inkTrail = [];
+            revealedWalls.clear();
+            addInkPoint(player.x, player.y);
+
+            crystals = [];
+            const crystalCountForLevel = BASE_CRYSTAL_COUNT + (level - 1);
+            for (let i = 0; i < crystalCountForLevel; i++) {
+                const pos = getEmptyTile();
+                crystals.push({ x: pos.x, y: pos.y, collected: false });
+            }
+
+            enemies = [];
+            for (let i = 0; i < ENEMY_COUNT; i++) {
+                const pos = getEmptyTile();
+                enemies.push({
+                    x: pos.x,
+                    y: pos.y,
+                    dx: (Math.random() < 0.5 ? -1 : 1) * ENEMY_SPEED,
+                    dy: 0
+                });
+            }
+
+            updateHUD();
+            gameState = 'PLAYING';
+        }
+
+        // --- Player and Movement ---
+
+        function addInkPoint(x, y) {
+            const gridX = Math.floor(x / TILE_SIZE);
+            const gridY = Math.floor(y / TILE_SIZE);
+            for (let dy = -1; dy <= 1; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    const nx = gridX + dx;
+                    const ny = gridY + dy;
+                    if (nx >= 0 && nx < MAP_WIDTH && ny >= 0 && ny < MAP_HEIGHT) {
+                        const key = `${nx},${ny}`;
+                        if (map[ny][nx] === 1) {
+                            revealedWalls.add(key);
+                        } else {
+                            if (!inkTrail.some(p => p.key === key)) {
+                                inkTrail.push({ x: nx * TILE_SIZE, y: ny * TILE_SIZE, key: key });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        function isWall(x, y) {
+            const gridX = Math.floor(x / TILE_SIZE);
+            const gridY = Math.floor(y / TILE_SIZE);
+            if (gridX < 0 || gridX >= MAP_WIDTH || gridY < 0 || gridY >= MAP_HEIGHT) {
+                return true;
+            }
+            return map[gridY][gridX] === 1;
+        }
+
+        // --- Enemies ---
+        function moveEnemies() {
+            if (gameState !== 'PLAYING') return;
+            enemies.forEach(enemy => {
+                let nextX = enemy.x + enemy.dx;
+                let nextY = enemy.y + enemy.dy;
+                if (isWall(nextX, nextY) || isWall(nextX + TILE_SIZE - 1, nextY + TILE_SIZE - 1)) {
+                    const dir = Math.random();
+                    if (dir < 0.25) { enemy.dx = ENEMY_SPEED; enemy.dy = 0; }
+                    else if (dir < 0.5) { enemy.dx = -ENEMY_SPEED; enemy.dy = 0; }
+                    else if (dir < 0.75) { enemy.dx = 0; enemy.dy = ENEMY_SPEED; }
+                    else { enemy.dx = 0; enemy.dy = -ENEMY_SPEED; }
+                } else {
+                    enemy.x = nextX;
+                    enemy.y = nextY;
+                }
+                const gridX = Math.floor((enemy.x + TILE_SIZE / 2) / TILE_SIZE);
+                const gridY = Math.floor((enemy.y + TILE_SIZE / 2) / TILE_SIZE);
+                const key = `${gridX},${gridY}`;
+                const trailIndex = inkTrail.findIndex(p => p.key === key);
+                if (trailIndex !== -1) {
+                    inkTrail.splice(trailIndex, 1);
+                }
+            });
+        }
+
+        // --- Collision and Updates ---
+
+        function rectsOverlap(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.width &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+
+        // REMOVED: circleRectOverlap is no longer needed
+
+        function checkCollisions() {
+            if (gameState !== 'PLAYING') return;
+            const playerRect = { x: player.x, y: player.y, width: TILE_SIZE, height: TILE_SIZE };
+
+            crystals.forEach(crystal => {
+                if (!crystal.collected) {
+                    const crystalRect = { x: crystal.x, y: crystal.y, width: TILE_SIZE, height: TILE_SIZE };
+                    if (rectsOverlap(playerRect, crystalRect)) {
+                        crystal.collected = true;
+                    }
+                }
+            });
+
+            enemies.forEach(enemy => {
+                // CHANGE: Use square-based collision for enemies
+                const enemyRect = { x: enemy.x, y: enemy.y, width: TILE_SIZE, height: TILE_SIZE };
+                if (rectsOverlap(playerRect, enemyRect)) {
+                    player.lives--;
+                    if (player.lives <= 0) {
+                        gameState = 'GAME_OVER';
+                    } else {
+                        const startPos = { x: Math.floor(MAP_WIDTH / 2) * TILE_SIZE, y: Math.floor(MAP_HEIGHT / 2) * TILE_SIZE };
+                        player.x = startPos.x;
+                        player.y = startPos.y;
+                    }
+                }
+            });
+        }
+
+        function checkWinCondition() {
+            if (gameState !== 'PLAYING') return;
+            const remainingCrystals = crystals.filter(c => !c.collected).length;
+            if (remainingCrystals === 0) {
+                level++;
+                init();
+            }
+        }
+
+        function updateHUD() {
+            document.getElementById('lives').textContent = `LIVES: ${player.lives}`;
+            const remainingCrystals = crystals.filter(c => !c.collected).length;
+            document.getElementById('crystals').textContent = `CRYSTALS: ${remainingCrystals}`;
+            document.getElementById('level').textContent = `LEVEL: ${level}`;
+        }
+
+        // --- Drawing ---
+
+        function draw() {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            if (gameState === 'START') {
+                drawMessage("Subterranean Cartographer", "Press any key to start");
+                return;
+            }
+            if (gameState === 'GAME_OVER') {
+                drawMessage("Game Over", "Press R to restart");
+                return;
+            }
+            ctx.fillStyle = '#005555';
+            inkTrail.forEach(point => ctx.fillRect(point.x, point.y, TILE_SIZE, TILE_SIZE));
+            ctx.fillStyle = '#333344';
+            revealedWalls.forEach(key => {
+                const [x, y] = key.split(',').map(Number);
+                ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            });
+            
+            // CHANGE: Draw crystals as squares
+            ctx.fillStyle = '#ff00ff';
+            crystals.forEach(crystal => {
+                if (!crystal.collected) {
+                    ctx.fillRect(crystal.x, crystal.y, TILE_SIZE, TILE_SIZE);
+                }
+            });
+            
+            // CHANGE: Draw enemies as squares
+            ctx.fillStyle = '#ff4444';
+            enemies.forEach(enemy => {
+                ctx.fillRect(enemy.x, enemy.y, TILE_SIZE, TILE_SIZE);
+            });
+
+            ctx.fillStyle = '#00ffff';
+            ctx.fillRect(player.x, player.y, TILE_SIZE, TILE_SIZE);
+        }
+
+        function drawMessage(line1, line2) {
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#e0e0e0';
+            const titleSize = Math.min(32, Math.floor(canvas.width / 25));
+            ctx.font = `${titleSize}px "Press Start 2P"`;
+            ctx.fillText(line1, canvas.width / 2, canvas.height / 2 - (titleSize));
+            const subtitleSize = Math.min(16, Math.floor(canvas.width / 40));
+            ctx.font = `${subtitleSize}px "Press Start 2P"`;
+            ctx.fillText(line2, canvas.width / 2, canvas.height / 2 + (subtitleSize));
+        }
+
+        // --- Game Loop ---
+        function gameLoop() {
+            if (gameState === 'PLAYING') {
+                if (playerMoveCooldown > 0) {
+                    playerMoveCooldown--;
+                }
+                moveEnemies();
+                checkCollisions();
+                checkWinCondition();
+                updateHUD();
+            }
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Event Listeners ---
+        window.addEventListener('keydown', (e) => {
+            if (gameState === 'START') {
+                level = 1; // Reset level on new game
+                init();
+                return;
+            }
+            if (gameState === 'GAME_OVER' && e.key.toLowerCase() === 'r') {
+                level = 1; // Reset level on restart
+                init();
+                return;
+            }
+
+            // --- Cheat Code Logic ---
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                userInput.push(e.key);
+                if (userInput.length > cheatCode.length) {
+                    userInput.shift(); // Keep the array the same size as the code
+                }
+                if (JSON.stringify(userInput) === JSON.stringify(cheatCode)) {
+                    player.lives += 30;
+                    userInput = []; // Reset so it can't be triggered again immediately
+                }
+            }
+
+            if (gameState === 'PLAYING' && playerMoveCooldown <= 0) {
+                let moved = false;
+                let nextX = player.x;
+                let nextY = player.y;
+                switch (e.key) {
+                    case 'ArrowUp': nextY -= TILE_SIZE; moved = true; break;
+                    case 'ArrowDown': nextY += TILE_SIZE; moved = true; break;
+                    case 'ArrowLeft': nextX -= TILE_SIZE; moved = true; break;
+                    case 'ArrowRight': nextX += TILE_SIZE; moved = true; break;
+                }
+                if (moved) {
+                    if (!isWall(nextX, nextY)) {
+                        player.x = nextX;
+                        player.y = nextY;
+                        addInkPoint(player.x, player.y);
+                    }
+                    playerMoveCooldown = PLAYER_MOVE_DELAY;
+                }
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            if(gameState === 'PLAYING' || gameState === 'GAME_OVER') {
+                init();
+            } else {
+                setupCanvasAndMap();
+                draw();
+            }
+        });
+
+        // Initial setup and start
+        setupCanvasAndMap();
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
